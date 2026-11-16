@@ -1,0 +1,89 @@
+ZELDA3 PARA PS2 - REVISAO R5 - 15/11/2026
+
+INICIO DIRETO
+Esta revisao entra direto no jogo. O menu de configuracoes foi removido
+por enquanto, inclusive o atalho L2 + R2 + START. O inventario e o menu
+de salvar do proprio Zelda continuam funcionando.
+
+O alvo e 60 FPS (NTSC aproximadamente 59,94 Hz), sem frameskip.
+Cada atualizacao de logica/audio e seguida de um desenho. O ajuste antigo
+de 30 FPS no memory card nao e aplicado. Nao precisa apagar seu save/INI.
+Ha uma unica sincronizacao de VBlank; a espera extra por temporizador foi
+retirada. Isso elimina esses limitadores, mas nao comprova 60 FPS constantes.
+
+ARQUIVOS
+A ISO inclui o ELF e os assets extraidos da ROM PT-BR enviada nesta conversa.
+O ELF tambem aceita os assets USA da revisao anterior.
+Para o ELF separado, coloque zelda3_assets.dat na mesma pasta dele.
+O ZIP PT-BR ja traz ELF e DAT juntos. A saida e NTSC entrelacada.
+
+CONTROLES PADRAO
+Direcional / analogico esquerdo: movimento
+X: espada (B do SNES)
+Circulo: acao / correr (A)
+Quadrado: item (Y)
+Triangulo: mapa (X)
+Start: inventario / pausa do proprio jogo
+Select: menu de salvar do proprio jogo
+L1 e R1: L e R do SNES
+L2 e R2 nao abrem configuracoes nem bloqueiam Start.
+As trocas de botoes, volume e outros ajustes ja salvos sao preservados.
+A porta 1 tem prioridade inicialmente; a porta 2 funciona se a 1 estiver
+sem controle. O controle ativo so muda ao ser desconectado.
+
+SAVE
+Pasta mc0:/ZELDA3-LTTP/ ou mc1:/ZELDA3-LTTP/. Um cartao com progresso
+recebe prioridade sobre outro que tenha somente preferencias.
+O progresso usa sram.a / sram.b, com checksum e copia alternada.
+O sram.dat antigo e importado se nenhum banco novo for valido.
+Os INIs existentes sao lidos, mas nao alterados nesta revisao sem menu.
+Nao apague a pasta para trocar de versao. A ISO exige memory card para
+persistir o progresso; sem cartao, o ELF tenta a pasta saves/ se gravavel.
+
+MUDANCAS DA R4 MANTIDAS
+- Inicio direto e alvo 60 FPS, ignorando o antigo modo 30.
+- Sem descarte de desenhos e sem espera de SDL_Delay apos o VBlank.
+- Audio enviado por SIF de forma assincrona: a fila nao espera no loop
+  do jogo. Um pacote permanece valido ate a confirmacao da IOP.
+- Reamostragem 32 -> 48 kHz na IOP conserva a fracao entre blocos e
+  trata a volta do buffer. Antes eram consumidas so 341 amostras por
+  bloco, acumulando uma diferenca de 32 amostras por segundo.
+- Cache da lista de sprites de cada linha: evita varrer os 128 objetos
+  a cada scanline. Mantem prioridade OAM, limites e invalidacao por escrita.
+- Traducao PT-BR e correcoes anteriores preservadas.
+
+MUDANCAS R5 - CHUVA, CASTELO E ESCURIDAO
+A subtela so e desenhada quando algum pixel visivel realmente precisa
+dela. A mistura de cores usa tabelas reaproveitadas, preservando o brilho,
+soma/subtracao, meia cor, transparencia e as janelas do SNES.
+Paletas iguais nao invalidam o cache a cada quadro. Escritas no meio do
+quadro e mudancas diretas de paleta/brilho continuam sendo respeitadas.
+
+MEDIR NO CONSOLE (SEM MENU)
+Clique L3, apertando o analogico esquerdo, para mostrar/ocultar o contador.
+Ele mostra FPS reais e tempos medios em milissegundos:
+J = logica; A = audio; P = PPU; GS = envio/desenho; V = espera de VBlank.
+As medidas sao atualizadas aproximadamente a cada segundo. O contador
+fica oculto por padrao e nao grava preferencias. Nao e um novo menu.
+Se o jogo apresenta 30 quadros/s nesta arquitetura, a logica tambem avanca
+a 30 atualizacoes/s e fica lenta. A R5 busca reduzir o custo para caber
+no intervalo de aproximadamente 16,7 ms, sem pular desenhos.
+
+REFERENCIA PSP
+https://github.com/z2442/zelda3-PSP
+Foram usados como referencia o VBlank unico, a preparacao de sprites
+por quadro e a separacao da entrega de audio da apresentacao.
+Os comandos GU/GE e o Media Engine do PSP nao sao compativeis com o PS2.
+O renderer de tiles e o DSP nao foram transferidos integralmente para
+hardware nesta revisao. A PPU ainda e parcialmente em software.
+
+VALIDACAO E LIMITES
+ELF/IOP compilados com ps2dev. Testes no computador: controles, saves,
+audio, 3072 quadros sinteticos de PPU e replays com pixels iguais.
+35000 quadros USA e 40000 do percurso inicial iguais a R4; outros 35000
+PT-BR sem crash/erro de alinhamento.
+A medicao de PPU no computador reduziu o tempo em cerca de 32% no castelo,
+26% na chuva e 38% nos trechos escuros com a segunda camada de iluminacao.
+Isso NAO mede FPS no PS2; trechos escuros sem essa camada quase nao mudaram.
+A R5 nao foi executada aqui em PS2 ou PCSX2. Os 60 FPS constantes ainda
+precisam ser medidos no console. A PPU continua parcialmente em software.
