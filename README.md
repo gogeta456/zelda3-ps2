@@ -4,7 +4,7 @@ Esta revisão fixa a apresentação em **60 FPS** (sem opção no menu, com fram
 
 ## Usar
 
-A ISO contém o ELF e os assets fornecidos pelo usuário. Para iniciar o ELF separado, mantenha `zelda3_assets.dat` na mesma pasta. Veja [LEIA-ME](ps2/LEIA-ME.txt) para os controles, importação de saves e comportamento sem memory card.
+Para iniciar o ELF separado, mantenha `zelda3_assets.dat` na mesma pasta. Veja [LEIA-ME](ps2/LEIA-ME.txt) para os controles, importação de saves e comportamento sem memory card.
 
 O menu não abre mais na inicialização (o jogo começa direto); abra durante o jogo com **Start + Select**. Direcional/analógico navegam, esquerda/direita alteram valores, X confirma e círculo cancela. As configurações só são aplicadas ao confirmar a saída; salvar é opcional. O arquivo INI externo não é mais necessário nem lido no PS2.
 
