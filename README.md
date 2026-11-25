@@ -77,3 +77,7 @@ O primeiro teste confere cada imagem exibida no modo 30 contra o passo correspon
 
 **Modo de vídeo** (Opções > Vídeo > MODO DE VIDEO): 480i (padrão), 240p ou 480p. O 480p é 704x480 progressivo, configurado como no Metroid Zero Mission DX;
 aparece uma tela de confirmação (aperte X em até 10 s para manter, senão volta) e o cartão só guarda o 480p depois de confirmado.
+
+## License
+
+esse projeto foi licenciado com a MIT LICENSE. Cheque 'LICENSE.txt' para mais detalhes.
