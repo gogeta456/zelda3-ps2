@@ -50,6 +50,10 @@ python3 ps2/make_iso.py zelda3-ps2-revisado.elf zelda3_assets.dat zelda3-ps2-rev
 
 O gerador de ISO verifica o cabeçalho ELF e extrai novamente cada arquivo para comparar seus bytes. Os assets não fazem parte do pacote de fontes.
 
+## Uso de IA
+
+esse projeto teve uso de ia para seu desenvolvimento, mas foi revisado.
+
 ## Verificações
 
 [VALIDACAO.md](ps2/VALIDACAO.md) descreve os resultados e seus limites. Testes portáveis:
