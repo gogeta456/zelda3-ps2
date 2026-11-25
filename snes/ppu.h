@@ -42,7 +42,10 @@ typedef uint16_t PpuZbufType;
 
 typedef struct PpuPixelPrioBufs {
   // This holds the prio in the upper 8 bits and the color in the lower 8 bits.
-  PpuZbufType data[kPpuXPixels];
+  PpuZbufType data[kPpuXPixels] __attribute__((aligned(8)));
+  // false while data[] is still all backdrop (0x0500) for the current line, which lets the first layer drawn skip the
+  // depth comparison. Any drawing into the buffer sets it.
+  bool dirty;
 } PpuPixelPrioBufs;
 
 enum {
@@ -142,24 +145,16 @@ struct Ppu {
   uint16_t cgramView[0x100];
   uint32_t paletteRevision; // GS palette cache invalidation, not serialized
   uint32_t palRgb[0x100];  // cgramView as final output pixels (brightness applied)
-  // Derived palettes only; these fields are not part of a saved game.
-  uint32_t fixedPalette[2][256]; // unclipped / clipped-to-black main screen
-  uint32_t fixedPaletteKey, fixedPaletteRevision;
-  bool fixedPaletteValid;
-  uint32_t gsMathPalette[256], gsMathKey, gsMathSourceRevision, gsMathRevision;
-  bool gsMathValid;
-  // Visible OAM entries, in original OAM order. Derived, never serialized.
-  uint8_t spriteRowCount[256], spriteRows[256][128];
-  bool spriteRowsValid;
-  // Subscreen color math: rows are built only for secondary colors in use.
-  // Derived state, excluded from SRAM/snapshots; no large per-frame memset.
-  uint32_t mixedPalette[256][256], mixedRowGeneration[256];
-  uint32_t mixedZero[256], mixedBackdrop[256];
-  uint32_t mixedGeneration, mixedSourceRevision, mixedKey;
-  bool mixedValid;
-  uint16_t paletteSource[256];
-  uint8_t paletteSourceBrightness;
-  bool paletteSourceValid;
+  // Color-math caches, valid for one frame (PpuBeginDrawing clears them), rebuilt on demand, not serialized.
+  uint32_t mathTab[3][0x100];  // [0]: main + fixed color, [1]: same where the subscreen is backdrop, [2]: half blend of the main backdrop with each subscreen color
+  uint32_t mathKey[3];         // what mathTab[] currently holds (0 = invalid)
+  uint32_t lutR[32], lutG[32], lutB[32];  // 5-bit channel -> output pixel bits (brightness applied)
+  uint8_t lutValid;
+  // Scanlines that at least one sprite covers (one bit per line), built once per frame; not serialized.
+  uint32_t spriteLineMask[8];
+  uint8_t spriteMaskValid;
+  // Half-blend results by (main pixel, subscreen pixel), direct mapped; valid for one frame and one (flags, fixed color).
+  uint32_t pairTag[256], pairVal[256], pairFlags, pairFixed;
 };
 
 Ppu* ppu_init();

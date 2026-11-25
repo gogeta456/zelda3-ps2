@@ -14,7 +14,8 @@ static const uint8_t glyphs[][7]={
  {17,17,17,17,17,10,4},{17,17,17,21,21,27,17},{17,17,10,4,10,17,17},
  {17,17,10,4,4,4,4},{31,1,2,4,8,16,31},
  {0,4,4,0,4,4,0},{0,0,0,31,0,0,0},{0,4,4,31,4,4,0},
- {0,16,8,4,8,16,0},{1,2,2,4,8,8,16},{17,2,4,8,17,0,0}
+ {0,16,8,4,8,16,0},{1,2,2,4,8,8,16},{17,2,4,8,17,0,0},
+ {0,0,0,0,0,12,12},{14,17,1,2,4,0,4},{4,4,4,4,4,0,4}
 };
 void Ps2VideoText(int x,int y,const char *s,int scale,uint32_t rgb){
  for(;*s;s++,x+=6*scale){
@@ -22,7 +23,12 @@ void Ps2VideoText(int x,int y,const char *s,int scale,uint32_t rgb){
   if(*s>='0'&&*s<='9')i=*s-'0';else if(*s>='A'&&*s<='Z')i=10+*s-'A';
   else if(*s==':')i=36;else if(*s=='-')i=37;else if(*s=='+')i=38;
   else if(*s=='>')i=39;else if(*s=='/')i=40;else if(*s=='%')i=41;
+  else if(*s=='.')i=42;else if(*s=='?')i=43;else if(*s=='!')i=44;
   if(i<0)continue;
-  for(int row=0;row<7;row++)for(int col=0;col<5;col++)if(glyphs[i][row]&(16u>>col))Ps2VideoRect(x+col*scale,y+row*scale,scale,scale,rgb);
+  for(int row=0;row<7;row++)for(int col=0;col<5;){
+   if(!(glyphs[i][row]&(16u>>col))){col++;continue;}
+   int run=1;while(col+run<5&&(glyphs[i][row]&(16u>>(col+run))))run++;
+   Ps2VideoRect(x+col*scale,y+row*scale,run*scale,scale,rgb);col+=run;
+  }
  }
 }

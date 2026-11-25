@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdarg.h>
 #include <unistd.h>
 #include <errno.h>
 #include <sys/stat.h>
@@ -13,55 +12,8 @@ FILE *ps2_fopen(const char *path, const char *mode);
 
 static int g_style;              // spelling of file names on this medium (see MakeName)
 static char g_dir[256];          // prefix prepended to relative paths ("" = use the cwd as is)
-static char g_logbuf[16384];
-static int g_log_file_on = 1;
-static int g_loglen;
 
 static int IsRelative(const char *p) { return p[0] != '/' && p[0] != '\\' && strchr(p, ':') == NULL; }
-
-static void FlushLog(void) {
-  char first[300];
-  const char *try_paths[3];
-  first[0] = 0;
-  if (g_dir[0]) snprintf(first, sizeof(first), "%szelda3_log.txt", g_dir);
-  try_paths[0] = first[0] ? first : NULL;
-  try_paths[1] = NULL;
-  try_paths[2] = "zelda3_log.txt";
-  for (int i = 0; i < 3; i++) {
-    if (!try_paths[i]) continue;
-    FILE *f = fopen(try_paths[i], "wb");
-    if (f) { fwrite(g_logbuf, 1, g_loglen, f); fclose(f); return; }
-  }
-}
-
-void ps2_log(const char *fmt, ...) {
-  char line[400];
-  va_list ap;
-  va_start(ap, fmt);
-  vsnprintf(line, sizeof(line), fmt, ap);
-  va_end(ap);
-  printf("[zelda3] %s\n", line);
-  int n = (int)strlen(line);
-  if (g_loglen + n + 2 < (int)sizeof(g_logbuf)) {
-    memcpy(g_logbuf + g_loglen, line, n);
-    g_loglen += n;
-    g_logbuf[g_loglen++] = '\n';
-  }
-  // Failures are written to the file right away; everything else when the game starts (see ps2_log_stop_file).
-  char low[400];
-  size_t k = 0;
-  for (; line[k] && k < sizeof(low) - 1; k++)
-    low[k] = (line[k] >= 'A' && line[k] <= 'Z') ? (char)(line[k] + 32) : line[k];
-  low[k] = 0;
-  if (g_log_file_on && (strstr(low, "fail") || strstr(low, "not found")))
-    FlushLog();
-}
-
-void ps2_log_stop_file(void) {
-  if (g_log_file_on)
-    FlushLog();
-  g_log_file_on = 0;
-}
 
 // ---- file names on different media ----
 // Discs (ISO9660) hold upper-case names with a version suffix ("ZELDA3.INI;1"), and level 1 images only allow 8.3 names.
@@ -138,7 +90,6 @@ void ps2_pick_data_dir(const char *argv0) {
   for (int i = 0; i < n; i++) {
     int style = kStyleAsIs;
     FILE *f = OpenIn(cand[i], kWanted, "rb", kStyleAsIs, &style);
-    ps2_log("data dir '%s': %s %s", cand[i], kWanted, f ? "FOUND" : "not found");
     if (f) {
       fclose(f);
       strcpy(g_dir, cand[i]);
@@ -146,7 +97,6 @@ void ps2_pick_data_dir(const char *argv0) {
       return;
     }
   }
-  ps2_log("%s not found anywhere; the game will stop", kWanted);
 }
 
 // ---- saves go to the memory card ----
@@ -234,7 +184,6 @@ static int McPrepare(void) {
       continue;
     snprintf(g_mc, sizeof(g_mc), "%s/%s/", kSlots[i], kMcFolder);
     g_mc_ready = 1;
-    ps2_log("save folder ready: %s", g_mc);
     return 1;
   }
   return 0;

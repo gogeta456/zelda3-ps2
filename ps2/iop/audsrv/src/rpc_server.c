@@ -25,7 +25,6 @@
 #include "common.h"
 #include "rpc_client.h"
 #include "debug_printf.h"
-#include "../../../ps2_audio_transport.h"
 
 /* rpc server variables */
 /** buffer for RPC DMA */
@@ -161,21 +160,6 @@ static void *rpc_command(int func, unsigned *data, int size)
 		case AUDSRV_AVAILABLE:
 		ret = audsrv_available();
 		break;
-
-        case Z3_AUDIO_RPC_PUSH: {
-            /* One bounded RPC replaces queued()/play()/sleep polling on EE.
-             * Do not accept partial frames. Keep at most 3 frames on IOP. */
-            int bytes = size >= 4 ? (int)data[0] : -1;
-            int queued = audsrv_queued();
-            if (bytes <= 0 || bytes > Z3_AUDIO_PACKET_BYTES || size < bytes + 4)
-                data[0] = -AUDSRV_ERR_ARGS;
-            else if (queued > bytes * 2 || audsrv_available() < bytes)
-                data[0] = 0; /* retain the complete frame on EE for retry */
-            else
-                data[0] = audsrv_play_audio((const char *)&data[1], bytes);
-            data[1] = queued;
-            return data;
-        }
 
 		case AUDSRV_QUEUED:
 		ret = audsrv_queued();

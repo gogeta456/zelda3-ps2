@@ -1,29 +1,16 @@
-# Zelda3 for PlayStation 2 — R5
+# Zelda3 for PlayStation 2 — revision 2: fixed 60 FPS
 
-Direct boot, 60 FPS target, no automatic frameskip and no configuration menu.
-Old memory-card settings cannot select 30 FPS in this build. Existing game
-saves, button mappings and sound settings remain readable.
+Native libpad input, direct AUDSRV PCM output, gsKit presentation and a Portuguese settings menu. The game starts straight away; open the menu during play with **Start + Select**. X confirms, Circle cancels. Preferences and game SRAM are stored in alternating, checksummed files under `mc0:/ZELDA3-LTTP/` or `mc1:/ZELDA3-LTTP/`. The legacy `sram.dat` is retained and imported when no valid new SRAM bank exists.
 
-R5 skips subscreen work when no visible main pixel can use it, caches exact
-SNES color math and preserves unchanged palettes across frames. L3 toggles
-a real presentation-FPS and per-stage millisecond overlay, without a menu.
+Presentation is fixed at **60 FPS**: one drawing pass per game/audio update, with **frameskip permanently off** (no drawing pass is dropped to catch up; if the console cannot keep up, the game runs slower). Neither has a menu entry. Preferences saved by earlier builds (for example 30 FPS or frameskip on) are forced to these values on load, without resetting controls, audio preferences or SRAM.
 
-The GS waits for one VBlank per picture. The second timer-based wait is gone.
-PCM submission is asynchronous over SIF with retained buffers and bounded
-queues. The bundled IOP server preserves the exact 32-to-48 kHz fractional
-sample phase. Visible OAM entries are classified once per frame; OAM order
-and scanline limits are preserved.
+The GS performs scaling, filtering, menu drawing and palette expansion on eligible scanlines. SNES composition, complex effects and SPC/DSP synthesis still use the EE. This is partial hardware acceleration. Audio generation follows game frames. The bundled AUDSRV server outputs silence on starvation without consuming unwritten data; the EE no longer performs the blocking runtime re-prime. The PCM budget matches the actual 341-input/512-output resampler ratio. Texture transfers omit unused rows, and full-screen clearing is skipped when the image covers the target.
 
-Reference: [z2442/zelda3-PSP](https://github.com/z2442/zelda3-PSP).
-The PSP GU renderer and Media Engine DSP have not been ported wholesale.
-PS2 composition and DSP still partly use the EE. This build has passed host
-regression tests and cross-compilation, but has not run on PS2 or PCSX2 here.
-Neither 60 FPS everywhere nor the reported scene-dependent 30 FPS drops is hardware-verified.
+The standalone ELF requires the user's `zelda3_assets.dat` beside it. The ISO authoring script embeds that file and checks every resulting disc entry. Sources do not include the assets.
 
-The standalone ELF needs `zelda3_assets.dat` beside it. The ISO/Portuguese
-bundle includes the user's supplied PT-BR assets. Source archives omit assets.
+See [Portuguese documentation](PS2.pt-BR.md), [usage instructions](ps2/LEIA-ME.txt) and [validation](ps2/VALIDACAO.md). This revision has compiled for PS2 and passed host regression and mocked-driver tests; it has not yet run on a PS2 or PCSX2. Real timing, perceived Triforce audio sync and GS presentation remain to be verified there.
 
-See [Portuguese documentation](PS2.pt-BR.md), [usage](ps2/LEIA-ME.txt) and
-[validation](ps2/VALIDACAO.md). Build: `make -f Makefile.ps2` with full ps2dev,
-ps2sdk, gsKit, SDL2 and ps2_drivers. Create the disc with
-`python3 ps2/make_iso.py game.elf zelda3_assets.dat game.iso` (requires pycdlib).
+Build with a full ps2dev environment: `make -f Makefile.ps2`. Set `PS2DEV`, `PS2SDK`, `GSKIT` and the compiler paths. Install `pycdlib`, then use `python3 ps2/make_iso.py zelda3.elf zelda3_assets.dat output.iso`.
+
+**Video mode** (Options > Video > MODO DE VIDEO): 480i (default), 240p or 480p. 480p is 704x480 progressive, set up like Metroid Zero Mission DX;
+a confirmation screen appears (press X within 10 s to keep it, otherwise it reverts) and the memory card only stores a confirmed 480p.

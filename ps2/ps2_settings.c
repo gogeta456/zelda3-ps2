@@ -13,8 +13,10 @@ static const Setting fields[]={
  FIELD(volume,100,0,100),FIELD(stereo,1,0,1),FIELD(analog,1,0,1),
  FIELD(deadzone,24,12,64),FIELD(swap_ab,0,0,1),FIELD(swap_xy,0,0,1),
  FIELD(filtering,0,0,1),FIELD(aspect,0,0,1),FIELD(saturation,100,0,200),
- FIELD(frame_mode,1,0,1),FIELD(show_fps,0,0,1),FIELD(gs_palette,0,0,1),
- FIELD(switch_lr,0,0,1),FIELD(low_health_beep,1,0,1),FIELD(dim_flashes,0,0,1)
+ FIELD(frame_mode,1,1,1),FIELD(show_fps,0,0,1),FIELD(gs_palette,1,1,1),
+ FIELD(switch_lr,0,0,1),FIELD(low_health_beep,1,0,1),FIELD(dim_flashes,0,0,1),
+ FIELD(frameskip,0,0,0), /* frame_mode (always 60 FPS), gs_palette (PPU on the GS, always on) and frameskip (always off) are fixed: no menu entry, kept so old files still load (the values saved in them are forced to these). The last two fields are optional when reading files saved before they existed */
+ FIELD(video_mode,0,0,2)
 };
 #undef FIELD
 #define NFIELDS (sizeof(fields)/sizeof(fields[0]))
@@ -27,11 +29,6 @@ uint32_t Ps2Crc32(const void *data,unsigned size) {
 }
 void Ps2SettingsDefaults(Ps2Settings *s) {
  for(unsigned i=0;i<NFIELDS;i++) *(int *)((char *)s+fields[i].offset)=fields[i].def;
-}
-void Ps2SettingsUseDirectBoot(Ps2Settings *s) {
- // No configuration writes: preserve stored preferences for a future menu.
- s->frame_mode=1;
- s->gs_palette=0; // compatibility path until GS palette performance is measured
 }
 void Ps2SettingsClamp(Ps2Settings *s) {
  for(unsigned i=0;i<NFIELDS;i++) {
@@ -69,13 +66,13 @@ static bool ReadConfig(int bank,Ps2Settings *s,uint32_t *generation) {
    if(seen&(1u<<i)) return false;
    *(int *)((char *)s+fields[i].offset)=(int)v; seen|=1u<<i; found=true; break;
   }
+  if(!found && !strcmp(p,"linecache")) found=true; // removed setting: files saved by earlier builds still load
   if(!found) return false;
   p=nl+1;
  }
- if(seen!=(1u<<NFIELDS)-1) return false;
- // Revision 1 defaulted to Auto/60 with experimental palette streaming.
- // Migrate only these performance settings; retain controls, sound and saves.
- if(version==1) { s->frame_mode=0; s->gs_palette=0; }
+ if((seen|(3u<<(NFIELDS-2)))!=(1u<<NFIELDS)-1) return false; // frameskip and video_mode may be missing in older files
+ // Older files can hold other values for the fixed fields (e.g. 30 FPS or frameskip on): Clamp forces them to the fixed
+ // values and keeps controls, sound and every other saved preference.
  Ps2SettingsClamp(s); return true;
 }
 bool Ps2SettingsLoad(Ps2Settings *s) {

@@ -1,21 +1,27 @@
-ZELDA3 PARA PS2 - REVISAO R5 - 15/11/2026
+ZELDA3 PARA PS2 - REVISAO 2 - 60 FPS FIXO - 08/11/2026
 
-INICIO DIRETO
-Esta revisao entra direto no jogo. O menu de configuracoes foi removido
-por enquanto, inclusive o atalho L2 + R2 + START. O inventario e o menu
-de salvar do proprio Zelda continuam funcionando.
+COMO INICIAR
+A ISO inclui o ELF e o zelda3_assets.dat fornecido nesta conversa.
+Para usar o ELF separado, coloque zelda3_assets.dat na mesma pasta dele.
+Use um carregador compativel com homebrew PS2. A saida e NTSC entrelacada.
 
-O alvo e 60 FPS (NTSC aproximadamente 59,94 Hz), sem frameskip.
-Cada atualizacao de logica/audio e seguida de um desenho. O ajuste antigo
-de 30 FPS no memory card nao e aplicado. Nao precisa apagar seu save/INI.
-Ha uma unica sincronizacao de VBlank; a espera extra por temporizador foi
-retirada. Isso elimina esses limitadores, mas nao comprova 60 FPS constantes.
+MENU
+Nao abre mais ao iniciar: o jogo comeca direto. Durante o jogo, aperte START + SELECT juntos para abrir.
+Direcional ou analogico: navegar; esquerda/direita: alterar.
+X: confirmar; circulo: cancelar. Solte os botoes e centralize o analogico
+apos sair para evitar que a confirmacao seja recebida pelo jogo.
+"Salvar e voltar" grava as preferencias. "Aplicar sem salvar" vale somente
+para esta sessao. "Cancelar" descarta as alteracoes desta abertura do menu.
 
-ARQUIVOS
-A ISO inclui o ELF e os assets extraidos da ROM PT-BR enviada nesta conversa.
-O ELF tambem aceita os assets USA da revisao anterior.
-Para o ELF separado, coloque zelda3_assets.dat na mesma pasta dele.
-O ZIP PT-BR ja traz ELF e DAT juntos. A saida e NTSC entrelacada.
+QUADROS
+Fixo em 60 FPS (sem opcao no menu): cada passo do jogo desenha uma imagem.
+O frameskip tambem e fixo, sempre desligado: nenhum desenho e pulado para
+recuperar atraso. Se o console nao der conta, o jogo roda mais devagar.
+A saida NTSC corresponde a aproximadamente 59,94 apresentacoes por segundo.
+"Mostrar FPS" conta as apresentacoes. Nao ha garantia de 60 FPS constantes.
+Preferencias salvas por versoes anteriores (30 FPS, frameskip ligado) sao
+ajustadas sozinhas ao carregar; os outros ajustes e o progresso salvo sao
+mantidos.
 
 CONTROLES PADRAO
 Direcional / analogico esquerdo: movimento
@@ -23,67 +29,56 @@ X: espada (B do SNES)
 Circulo: acao / correr (A)
 Quadrado: item (Y)
 Triangulo: mapa (X)
-Start: inventario / pausa do proprio jogo
+Start: inventario / pausa
 Select: menu de salvar do proprio jogo
-L1 e R1: L e R do SNES
-L2 e R2 nao abrem configuracoes nem bloqueiam Start.
-As trocas de botoes, volume e outros ajustes ja salvos sao preservados.
+L1 e R1: L e R do SNES; troca de itens pode ser ativada nas preferencias
+E possivel trocar X/circulo e quadrado/triangulo e ajustar a zona morta.
 A porta 1 tem prioridade inicialmente; a porta 2 funciona se a 1 estiver
-sem controle. O controle ativo so muda ao ser desconectado.
+sem controle. O controle ativo permanece selecionado ate ser desconectado.
 
-SAVE
-Pasta mc0:/ZELDA3-LTTP/ ou mc1:/ZELDA3-LTTP/. Um cartao com progresso
-recebe prioridade sobre outro que tenha somente preferencias.
-O progresso usa sram.a / sram.b, com checksum e copia alternada.
-O sram.dat antigo e importado se nenhum banco novo for valido.
-Os INIs existentes sao lidos, mas nao alterados nesta revisao sem menu.
-Nao apague a pasta para trocar de versao. A ISO exige memory card para
-persistir o progresso; sem cartao, o ELF tenta a pasta saves/ se gravavel.
+MEMORY CARD E SAVE
+A pasta e mc0:/ZELDA3-LTTP/ ou mc1:/ZELDA3-LTTP/. O menu mostra o destino.
+Um cartao que ja tenha progresso do jogo tem prioridade sobre um cartao
+que tenha somente preferencias. O destino fica fixo durante a sessao.
+As preferencias ficam em zelda3.ini / zelda3.alt.ini. O progresso usa
+sram.a / sram.b. Sao copias alternadas com geracao e checksum; se uma
+estiver incompleta, a outra copia valida ainda pode ser carregada.
+O sram.dat antigo e importado se nao existir um banco novo valido, e
+permanece preservado. Faca backup da pasta inteira antes de migrar saves.
+Para importar outro sram.dat depois, guarde o backup dos bancos novos e
+retire sram.a / sram.b da pasta antes de abrir o jogo.
+Salvar preferencias NAO salva o progresso: use o comando de salvar do jogo.
+Se o cartao selecionado for removido, uma gravacao falha; o programa nao
+muda silenciosamente para outro cartao. O menu permite aplicar sem salvar.
+Sem cartao ao iniciar, tenta a pasta saves/ junto dos dados, se gravavel.
+A ISO e somente leitura: use memory card para manter o progresso.
+O INI ao lado do ELF nao e mais lido pela versao PS2.
 
-MUDANCAS DA R4 MANTIDAS
-- Inicio direto e alvo 60 FPS, ignorando o antigo modo 30.
-- Sem descarte de desenhos e sem espera de SDL_Delay apos o VBlank.
-- Audio enviado por SIF de forma assincrona: a fila nao espera no loop
-  do jogo. Um pacote permanece valido ate a confirmacao da IOP.
-- Reamostragem 32 -> 48 kHz na IOP conserva a fracao entre blocos e
-  trata a volta do buffer. Antes eram consumidas so 341 amostras por
-  bloco, acumulando uma diferenca de 32 amostras por segundo.
-- Cache da lista de sprites de cada linha: evita varrer os 128 objetos
-  a cada scanline. Mantem prioridade OAM, limites e invalidacao por escrita.
-- Traducao PT-BR e correcoes anteriores preservadas.
+O QUE MUDOU NESTA REVISAO
+- 60 FPS fixo, sem opcao no menu. O modo de 30 FPS (dois passos de logica/audio
+  por desenho) nao pode mais ser escolhido.
+- Removida a recuperacao de audio que podia bloquear o jogo repetidamente.
+  O driver IOP agora envia silencio quando faltam dados, sem voltar a tocar
+  amostras antigas nem exigir uma longa reinicializacao da fila na EE.
+- Relogio PCM ajustado ao consumo efetivo do conversor de audio do driver.
+- O GS desenha tiles, sprites e color math sempre que possivel (sem opcao no menu); modo 7, janelas e mosaico usam o caminho do EE.
+- O frameskip fica sempre desligado (sem opcao no menu).
+  Escala, filtragem, apresentacao e menu continuam usando o GS.
+- Apenas as 224 linhas visiveis sao enviadas para a textura, sem as 32 linhas
+  extras. A limpeza completa da tela foi retirada quando a imagem a cobre.
+- Mantidos controles nativos, menu em portugues e saves no memory card.
 
-MUDANCAS R5 - CHUVA, CASTELO E ESCURIDAO
-A subtela so e desenhada quando algum pixel visivel realmente precisa
-dela. A mistura de cores usa tabelas reaproveitadas, preservando o brilho,
-soma/subtracao, meia cor, transparencia e as janelas do SNES.
-Paletas iguais nao invalidam o cache a cada quadro. Escritas no meio do
-quadro e mudancas diretas de paleta/brilho continuam sendo respeitadas.
+LIMITES DESTA ENTREGA
+Compilado com ps2dev e testado no computador por replays e simulacoes de
+entrada, audio e arquivos. Ainda nao executado em PS2 ou PCSX2 nesta revisao.
+A percepcao do audio na Triforce e o desempenho precisam de teste no console.
+Parte da PPU (composicao, efeitos e Mode 7) e o DSP do SNES ainda rodam na
+CPU. A aceleracao GS e parcial; esta versao nao e uma PPU toda em hardware.
+O filtro suave desativa a expansao por paleta, mantendo filtragem pelo GS.
+Os testes detalhados e instrucoes de compilacao acompanham o codigo-fonte.
 
-MEDIR NO CONSOLE (SEM MENU)
-Clique L3, apertando o analogico esquerdo, para mostrar/ocultar o contador.
-Ele mostra FPS reais e tempos medios em milissegundos:
-J = logica; A = audio; P = PPU; GS = envio/desenho; V = espera de VBlank.
-As medidas sao atualizadas aproximadamente a cada segundo. O contador
-fica oculto por padrao e nao grava preferencias. Nao e um novo menu.
-Se o jogo apresenta 30 quadros/s nesta arquitetura, a logica tambem avanca
-a 30 atualizacoes/s e fica lenta. A R5 busca reduzir o custo para caber
-no intervalo de aproximadamente 16,7 ms, sem pular desenhos.
-
-REFERENCIA PSP
-https://github.com/z2442/zelda3-PSP
-Foram usados como referencia o VBlank unico, a preparacao de sprites
-por quadro e a separacao da entrega de audio da apresentacao.
-Os comandos GU/GE e o Media Engine do PSP nao sao compativeis com o PS2.
-O renderer de tiles e o DSP nao foram transferidos integralmente para
-hardware nesta revisao. A PPU ainda e parcialmente em software.
-
-VALIDACAO E LIMITES
-ELF/IOP compilados com ps2dev. Testes no computador: controles, saves,
-audio, 3072 quadros sinteticos de PPU e replays com pixels iguais.
-35000 quadros USA e 40000 do percurso inicial iguais a R4; outros 35000
-PT-BR sem crash/erro de alinhamento.
-A medicao de PPU no computador reduziu o tempo em cerca de 32% no castelo,
-26% na chuva e 38% nos trechos escuros com a segunda camada de iluminacao.
-Isso NAO mede FPS no PS2; trechos escuros sem essa camada quase nao mudaram.
-A R5 nao foi executada aqui em PS2 ou PCSX2. Os 60 FPS constantes ainda
-precisam ser medidos no console. A PPU continua parcialmente em software.
+MODO DE VIDEO (Opcoes > Video > MODO DE VIDEO): 480I (padrao), 240P ou 480P.
+  240P: progressivo de 15 kHz (uma linha do SNES por linha da tela). 480P: 704x480 progressivo (cabo componente/VGA),
+  receita do Metroid Zero Mission DX. Ao escolher 480P aparece uma tela de confirmacao: aperte X em ate 10 segundos para manter;
+  se nao aparecer imagem ou o tempo acabar, volta sozinho ao modo anterior. O cartao so guarda 480P depois de confirmado.
+  No 480P o GS desenha tiles e sprites, mas linhas com color math e o filtro suave com GS usam o caminho antigo (EE).

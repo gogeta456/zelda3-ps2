@@ -1,6 +1,5 @@
 #ifndef MOCK_AUDSRV_H
 #define MOCK_AUDSRV_H
-#define AUDSRV_IRX 0x870884e
 struct audsrv_fmt_t{int freq,bits,channels;};
 int audsrv_stop_audio(void);
 int audsrv_set_volume(int volume);

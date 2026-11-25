@@ -54,7 +54,7 @@ static const int gaussValues[512] = {
 };
 
 static void dsp_cycleChannel(Dsp* dsp, int ch);
-static void dsp_handleEcho(Dsp* dsp, int* outputL, int* outputR, int inL, int inR);
+static void dsp_handleEcho(Dsp* dsp, int* outputL, int* outputR);
 static void dsp_handleGain(Dsp* dsp, int ch);
 static void dsp_decodeBrr(Dsp* dsp, int ch);
 static int16_t dsp_getSample(Dsp* dsp, int ch, int sampleNum, int offset);
@@ -131,20 +131,11 @@ void dsp_saveload(Dsp *dsp, SaveLoadFunc *func, void *ctx) {
 
 void dsp_cycle(Dsp* dsp) {
   int totalL = 0;
-  int totalR = 0, echoL = 0, echoR = 0;
+  int totalR = 0;
   for(int i = 0; i < 8; i++) {
     dsp_cycleChannel(dsp, i);
-    int channelL = (dsp->channel[i].sampleOut * dsp->channel[i].volumeL) >> 6;
-    int channelR = (dsp->channel[i].sampleOut * dsp->channel[i].volumeR) >> 6;
-    totalL += channelL;
-    totalR += channelR;
-    // The echo mix uses these same samples and volumes. Preserve its separate
-    // per-channel clamp order while avoiding a second pass/multiply per voice.
-    if (dsp->channel[i].echoEnable) {
-      echoL += channelL; echoR += channelR;
-      echoL = echoL < -0x8000 ? -0x8000 : (echoL > 0x7fff ? 0x7fff : echoL);
-      echoR = echoR < -0x8000 ? -0x8000 : (echoR > 0x7fff ? 0x7fff : echoR);
-    }
+    totalL += (dsp->channel[i].sampleOut * dsp->channel[i].volumeL) >> 6;
+    totalR += (dsp->channel[i].sampleOut * dsp->channel[i].volumeR) >> 6;
     totalL = totalL < -0x8000 ? -0x8000 : (totalL > 0x7fff ? 0x7fff : totalL); // clamp 16-bit
     totalR = totalR < -0x8000 ? -0x8000 : (totalR > 0x7fff ? 0x7fff : totalR); // clamp 16-bit
   }
@@ -152,7 +143,7 @@ void dsp_cycle(Dsp* dsp) {
   totalR = (totalR * dsp->masterVolumeR) >> 7;
   totalL = totalL < -0x8000 ? -0x8000 : (totalL > 0x7fff ? 0x7fff : totalL); // clamp 16-bit
   totalR = totalR < -0x8000 ? -0x8000 : (totalR > 0x7fff ? 0x7fff : totalR); // clamp 16-bit
-  dsp_handleEcho(dsp, &totalL, &totalR, echoL, echoR);
+  dsp_handleEcho(dsp, &totalL, &totalR);
   if(dsp->mute) {
     totalL = 0;
     totalR = 0;
@@ -167,7 +158,7 @@ void dsp_cycle(Dsp* dsp) {
   dsp->evenCycle = !dsp->evenCycle;
 }
 
-static void dsp_handleEcho(Dsp* dsp, int* outputL, int* outputR, int inL, int inR) {
+static void dsp_handleEcho(Dsp* dsp, int* outputL, int* outputR) {
   // get value out of ram
   uint16_t adr = dsp->echoBufferAdr + dsp->echoBufferIndex * 4;
   dsp->firBufferL[dsp->firBufferIndex] = (
@@ -196,6 +187,16 @@ static void dsp_handleEcho(Dsp* dsp, int* outputL, int* outputR, int inL, int in
   int outR = *outputR + ((sumR * dsp->echoVolumeR) >> 7);
   *outputL = outL < -0x8000 ? -0x8000 : (outL > 0x7fff ? 0x7fff : outL); // clamp 16-bit
   *outputR = outR < -0x8000 ? -0x8000 : (outR > 0x7fff ? 0x7fff : outR); // clamp 16-bit
+  // get echo input
+  int inL = 0, inR = 0;
+  for(int i = 0; i < 8; i++) {
+    if(dsp->channel[i].echoEnable) {
+      inL += (dsp->channel[i].sampleOut * dsp->channel[i].volumeL) >> 6;
+      inR += (dsp->channel[i].sampleOut * dsp->channel[i].volumeR) >> 6;
+      inL = inL < -0x8000 ? -0x8000 : (inL > 0x7fff ? 0x7fff : inL); // clamp 16-bit
+      inR = inR < -0x8000 ? -0x8000 : (inR > 0x7fff ? 0x7fff : inR); // clamp 16-bit
+    }
+  }
   // write this to ram
   inL += (sumL * dsp->feedbackVolume) >> 7;
   inR += (sumR * dsp->feedbackVolume) >> 7;
@@ -634,20 +635,6 @@ void dsp_write(Dsp *dsp, uint8_t adr, uint8_t val) {
 }
 
 void dsp_getSamples(Dsp* dsp, int16_t* sampleData, int samplesPerFrame, int numChannels) {
-  // At the PS2's native rate both 533- and 534-sample requests select source
-  // sample i for output i in the original nearest-neighbour resampler. Avoid
-  // a float increment and conversion for every sample without changing PCM.
-  if (samplesPerFrame == 533 || samplesPerFrame == 534) {
-    if (numChannels == 1) {
-      for (int i = 0; i < samplesPerFrame; i++)
-        sampleData[i] = ((int)dsp->sampleBuffer[i * 2] + dsp->sampleBuffer[i * 2 + 1]) >> 1;
-    } else {
-      memcpy(sampleData, dsp->sampleBuffer, (size_t)samplesPerFrame * 2 * sizeof(int16_t));
-    }
-    dsp->sampleOffset = 0;
-    return;
-  }
-
   // resample from 534 samples per frame to wanted value
   float adder = 534.0f / samplesPerFrame;
   float location = 0.0f;

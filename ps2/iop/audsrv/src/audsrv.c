@@ -32,12 +32,11 @@
 #include "spu.h"
 #include "debug_printf.h"
 #include "ring_policy.h"
-#include "resample32.h"
 
 /* Zelda3 PS2 revision 2: empty initialization and underrun-safe PCM ring. */
 
 #define MODNAME "audsrv"
-#define VERSION "0.93"
+#define VERSION "0.93-z3r2"
 IRX_ID(MODNAME, 1, 4);
 
 /* globals */
@@ -304,7 +303,7 @@ int audsrv_queued()
  */
 int audsrv_wait_audio(int buflen)
 {
-	if (ringbuf_size < buflen)
+	if (ringbuf_size - 4 < buflen)
 	{
 		/* this will never happen */
 		return AUDSRV_ERR_ARGS;
@@ -423,8 +422,6 @@ static void play_thread(void *arg)
 	int step;
 	struct upsample_t up;
 	upsampler_t upsampler = NULL;
-	unsigned pcm_phase = 0;
-	static int16_t wrap_pcm[342 * 2];
 
 	(void)arg;
 
@@ -438,40 +435,26 @@ static void play_thread(void *arg)
 		if (format_changed)
 		{
 			upsampler = find_upsampler(core1_freq, core1_bits, core1_channels);
-			pcm_phase = 0;
 			format_changed = 0;
 		}
 
 		/* This game supplies 16-bit 32 kHz PCM. Do not read past its writer
 		 * when the EE misses a deadline; old AUDSRV wrapped and replayed
 		 * stale samples, forcing a costly EE-side drain/re-prime. */
-		int exact32 = core1_freq == 32000 && core1_bits == 16;
-		int fragment = (exact32 ? 342 : (512 * core1_freq) / 48000) << core1_sample_shift;
+		int fragment = ((512 * core1_freq) / 48000) << core1_sample_shift;
 		if (playing && upsampler != NULL &&
 		    z3_ring_can_read(readpos, writepos, ringbuf_size, fragment))
 		{
 			up.src = (const unsigned char *)ringbuf + readpos;
 			up.left = rendered_left;
 			up.right = rendered_right;
-			if (exact32) {
-                const int16_t *src = (const int16_t *)up.src;
-                if (readpos + fragment > ringbuf_size) {
-                    int first = ringbuf_size - readpos;
-                    memcpy(wrap_pcm, up.src, first);
-                    memcpy((char *)wrap_pcm + first, ringbuf, fragment - first);
-                    src = wrap_pcm;
-                }
-                step = z3_resample32(src, core1_channels, rendered_left,
-                    rendered_right, &pcm_phase) << core1_sample_shift;
-            } else {
-                step = upsampler(&up);
-            }
+			step = upsampler(&up);
 
 			readpos = readpos + step;
 			if (readpos >= ringbuf_size)
 			{
-				/* Preserve the remainder with variable 341/342-frame blocks. */
-				readpos -= ringbuf_size;
+				/* wrap around */
+				readpos = 0;
 			}
 		}
 		else

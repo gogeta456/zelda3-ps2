@@ -757,14 +757,6 @@ bool ZeldaRunFrame(int inputs) {
 void ZeldaSetLanguage(const char *language) {
   static const uint8 kDefaultConf[3] = { 0, 0, 0 };
   MemBlk found = { kDefaultConf, 3 };
-  // A translated asset set may use the extended text command encoding.
-  // Its first mapping describes the default, even when no INI language exists.
-  MemBlk default_mapping = kDialogueMap(0);
-  if (default_mapping.ptr) {
-    MemBlk config = FindIndexInMemblk(default_mapping, 1);
-    if (config.ptr && config.size == 3)
-      found = config;
-  }
   if (language) {
     size_t n = strlen(language);
     for (int i = 0; ; i++) {
@@ -895,7 +887,7 @@ void ZeldaReadSram() {
 
 void ZeldaWriteSram() {
 #ifdef _EE
-  if (!Ps2SramSave(g_zenv.sram, 8192)) Z3LOG("FAILED to save SRAM - check memory card");
+  Ps2SramSave(g_zenv.sram, 8192);
 #else
   rename("saves/sram.dat", "saves/sram.bak");
   FILE *f = fopen("saves/sram.dat", "wb");

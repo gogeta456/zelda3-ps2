@@ -1,49 +1,41 @@
-# Zelda3 no PlayStation 2 — R5, 15/11/2026
+# Zelda3 no PlayStation 2 — revisão 2: 60 FPS fixo
 
-Esta versão abre diretamente o jogo, com alvo de 60 FPS, sem frameskip e sem menu de configurações. O atalho L2 + R2 + Start foi retirado. O inventário e a tela de salvar do Zelda permanecem. Preferências antigas não ativam 30 FPS nesta versão; saves e outras configurações existentes são preservados, sem regravar o INI.
+Esta revisão fixa a apresentação em **60 FPS** (sem opção no menu, com frameskip sempre desligado) e elimina a reinicialização longa da fila de áudio durante o jogo. Mantém libpad, vídeo por gsKit, menu em português e preferências junto do save no memory card. Ainda precisa de validação em PS2/PCSX2: a compilação e os testes no computador não comprovam a latência percebida nem a taxa de quadros no console.
 
-Veja [LEIA-ME](ps2/LEIA-ME.txt) para instalação e controles. A ISO e o ZIP PT-BR incluem os assets extraídos da ROM fornecida. O ELF separado precisa do DAT ao lado. A compatibilidade PT-BR da R3 foi mantida.
+## Usar
 
-## Correção das cenas pesadas na R5
+A ISO contém o ELF e os assets fornecidos pelo usuário. Para iniciar o ELF separado, mantenha `zelda3_assets.dat` na mesma pasta. Veja [LEIA-ME](ps2/LEIA-ME.txt) para os controles, importação de saves e comportamento sem memory card.
 
-A R4 fazia uma atualização da lógica por apresentação. Assim, cair para 30 FPS também desacelera o jogo. Não existe mais seleção automática de 30: o custo do desenho pode ultrapassar o intervalo de VBlank e levar a apresentar a cada dois intervalos.
+O menu não abre mais na inicialização (o jogo começa direto); abra durante o jogo com **Start + Select**. Direcional/analógico navegam, esquerda/direita alteram valores, X confirma e círculo cancela. As configurações só são aplicadas ao confirmar a saída; salvar é opcional. O arquivo INI externo não é mais necessário nem lido no PS2.
 
-O percurso inicial foi reproduzido por 40 mil quadros, cobrindo chuva, castelo e salas escuras com lanterna. O caminho de subtela/mistura na CPU executava trabalho desnecessário: dentro do castelo, frequentemente só o fundo transparente habilita a mistura, mas BG2 já cobre a linha. A R5 verifica os pixels visíveis antes de desenhar a subtela. Quando a mistura é necessária, usa paletas calculadas por cor secundária, sem refazer a aritmética de cada canal em cada pixel. Cores, prioridades, janelas, brilho, arredondamento de 5 bits e meia cor são preservados.
+| Botão padrão | Função |
+|---|---|
+| Direcional / analógico esquerdo | Movimento |
+| X | Espada / B |
+| Círculo | Ação, correr / A |
+| Quadrado | Item / Y |
+| Triângulo | Mapa / X |
+| Start | Inventário |
+| Select | Menu de salvar do jogo |
+| L1 / R1 | L / R, com troca de itens opcional |
 
-Paletas sem alterações mantêm os caches entre quadros. A comparação usa as cores originais, pois duas cores escuras podem produzir o mesmo RGB e resultados diferentes na mistura. Escritas de CGRAM, alterações diretas, brilho e wrap da geração de cache têm testes diferenciais.
+A apresentação é fixa em **60 FPS**, sem opção no menu: um desenho para cada passo de lógica/áudio. O frameskip também é fixo e fica sempre desligado: nenhum desenho é pulado para recuperar atraso; se o console não acompanhar, o jogo roda mais devagar. Em NTSC, a taxa corresponde a aproximadamente 59,94 apresentações por segundo, sem garantia de desempenho constante no hardware.
 
-| Caminho medido no computador | Tempo mediano de PPU R4 | R5 | Redução de tempo |
-|---|---:|---:|---:|
-| Castelo, subtela habilitada | 215,627 µs | 145,992 µs | 32,3% |
-| Chuva | 290,742 µs | 214,415 µs | 26,3% |
-| Escuridão com subtela de iluminação | 284,389 µs | 177,318 µs | 37,6% |
-| Escuridão sem subtela | 129,166 µs | 127,943 µs | 0,9% |
+Preferências salvas por versões anteriores (por exemplo 30 FPS ou frameskip ligado) são ajustadas sozinhas ao carregar, preservando controles, som e progresso. O INI passa a `Version=2`; não é necessário apagar o memory card.
 
-São tempos de execução **no computador**, sem áudio e fora da apresentação SDL. Não são taxas de FPS nem previsões de desempenho do PS2. Castelo/chuva usam a mediana de três execuções por versão; escuridão usa uma comparação de 40 mil quadros, dos quais 2.463 têm a subtela de iluminação e 4.323 não têm. O fonte de teste usa GCC com sanitizer de alinhamento; o ELF usa a toolchain R5900.
+## Implementação
 
-## Contador opcional, sem menu
+- Entrada: libpad nas duas portas, negociação analógica assíncrona e limitada, descarte de eixos inválidos de controles digitais, liberação na desconexão, histerese, normalização de direções opostas, ausência de overflow nas diagonais, prioridade do direcional sem apagar o analógico. Saída do menu exige soltar os controles.
+- Áudio: o antigo consumidor IOP avançava mesmo sem PCM suficiente. A revisão anterior tratava isso drenando e preenchendo a fila, o que bloqueou a simulação por 250 ms em um caso de teste. O AUDSRV incorporado agora começa vazio, distingue fila cheia de vazia e gera silêncio sem avançar sobre dados ainda não escritos. A EE envia somente dois fragmentos de silêncio inicial; não reinicia nem drena a fila a cada falta de dados. O teto normal é de três passos de áudio, com timeout de 40 ms apenas para uma fila travada.
+- Cadência PCM: o conversor de 32 kHz do AUDSRV consome 341 amostras por bloco de 512 amostras da SPU2 a 48 kHz, ou 31.968,75 amostras/s. O orçamento de saída segue essa taxa efetiva, usando `1365364/2560` amostras por passo NTSC. Cada estado de áudio do jogo é sintetizado uma vez e reamostrado nesse orçamento; não há avanço especulativo nem alteração da velocidade ao escolher 30/60 FPS. A síntese SPC/DSP continua na EE; conversão e saída ficam na IOP/SPU2.
+- Vídeo: gsKit, GIF/DMA, GS para escala, filtragem e menu. A expansão de paletas fica desligada por padrão e é experimental. Somente 224 linhas são transferidas, reduzindo 12,5% dos bytes de uma textura RGBA por apresentação; a tela inteira não é limpa quando o sprite a cobre. A PPU pode entregar índices de 8 bits ao GS para expansão de paletas quando a linha não exige composição incompatível. Até 32 paletas distintas por quadro; linhas complexas retornam ao caminho RGBA existente. Os buffers de DMA permanecem vivos até a conclusão. O filtro suave usa RGBA para evitar descontinuidades entre paletas.
+- Persistência: INI alternado `zelda3.ini` / `zelda3.alt.ini`, SRAM alternada `sram.a` / `sram.b`, com geração, CRC e verificação após a escrita. O banco válido anterior é preservado. `sram.dat` antigo é importado somente se nenhum banco novo for válido. A escolha do cartão considera progresso antes de preferências, e não muda durante a sessão.
 
-**L3** mostra ou oculta FPS e médias de tempo, atualizadas a cada segundo. `J` é lógica, `A` áudio, `P` PPU, `GS` envio/desenho, `V` espera de VBlank. Os tempos estão em milissegundos. O contador fica oculto por padrão e não altera o INI. Os timers por etapa não são consultados com o painel oculto. O painel não é uma ferramenta de perfil completa: seus próprios comandos de desenho entram no tempo GS.
-
-A R5 mantém início direto, alvo 60 FPS, ausência de frameskip e a fila assíncrona de áudio da R4. O kernel DSP e os assets não foram alterados nesta revisão.
-
-## Relação com o port do PSP
-
-Referência analisada: [z2442/zelda3-PSP](https://github.com/z2442/zelda3-PSP), especialmente `src/main.c`, `src/psp_renderer.c` e `src/psp_audio_me.c`.
-
-O PSP prepara geometria/tiles, apresenta com um VBlank e usa um processador auxiliar para o DSP. A R5 mantém a sincronização única e reduz o trabalho repetido de classificação de sprites; a transferência de áudio deixa de bloquear a apresentação. O código GU/GE e o Media Engine não podem ser ligados diretamente ao GS/IOP do PS2.
-
-**A PPU não foi inteiramente migrada para hardware.** Tiles, composição, efeitos e Mode 7 ainda passam pela EE; o GS apresenta, escala e filtra. O DSP/SPC também continua na EE. A opção experimental de paletas foi desativada na inicialização desta revisão enquanto seu ganho no console não está medido.
-
-Não há medição em PS2 nesta R5: a compilação e os testes não provam 60 FPS constantes nem identificam, sozinhos, o desempenho final das cenas relatadas. A alteração do limitador de apresentação é verificável no código; o desempenho final requer medição no console.
-
-O código do menu e do seletor 30/60 continua arquivado no fonte para possível retomada, mas o menu não é ligado ao ELF R4 e o loop nativo não usa o seletor. Seus testes legados continuam executáveis.
-
-Extrator de assets já entregue: https://zelda3-assets-extractor.agreeabledock1.chatgpt.site/ . Nenhuma alteração no site foi necessária nesta revisão.
+A aceleração é **parcial**. A composição de tiles/sprites, diversos efeitos e Mode 7 ainda passam pela CPU. Não foi feita uma reimplementação completa de PPU em GS/VU nem de DSP em SPU2. O modo de paletas nem sempre reduz o custo; deixe desligado para avaliar esta revisão. Não há medição de ganho de desempenho no PS2 nesta entrega.
 
 ## Compilar
 
-Requer ps2dev completo, incluindo ps2sdk, gsKit, SDL2 e ps2_drivers. Exportar as variáveis do ambiente instalado:
+Requer ps2dev completo, incluindo ps2sdk, gsKit, SDL2 e ps2_drivers. O Makefile também compila o AUDSRV corrigido em `ps2/iop/audsrv` e o incorpora no ELF, substituindo o módulo padrão do arquivo estático de drivers. O fonte e as licenças desse módulo acompanham o pacote. Exportar as variáveis do ambiente instalado:
 
 ```sh
 export PS2DEV=/caminho/ps2dev
@@ -68,12 +60,16 @@ O gerador de ISO verifica o cabeçalho ELF e extrai novamente cada arquivo para 
 ASAN_OPTIONS=detect_leaks=0 ./ps2/host-test/run_unit_tests.sh
 ```
 
-Para os replays, instale GCC e os arquivos de desenvolvimento SDL2. Compile também uma cópia original de referência, antes das alterações:
+Para os replays, instale GCC e os arquivos de desenvolvimento SDL2. Use também um executável host compilado a partir da versão original de referência:
 
 ```sh
-make -C ps2/host-test EXTRA=-DZ3_GS_TEST=1
-python3 ps2/host-test/compare_replays.py /caminho/original/z3test ps2/host-test/z3test /caminho/zelda3_assets.dat /tmp/z3-argb
 make -C ps2/host-test clean
-make -C ps2/host-test EXTRA='-DZ3_GS_TEST=1 -DZ3_PIXEL_ABGR=1'
-python3 ps2/host-test/compare_replays.py /caminho/original/z3test ps2/host-test/z3test /caminho/zelda3_assets.dat /tmp/z3-abgr
+make -C ps2/host-test EXTRA='-DZ3_GS_TEST=1 -DZ3_FRAME_TEST=1 -DZ3_PIXEL_ABGR=1'
+python3 ps2/host-test/compare_replays.py /caminho/original/z3test ps2/host-test/z3test /caminho/zelda3_assets.dat /tmp/z3-30 --fps30
+python3 ps2/host-test/compare_replays.py /caminho/original/z3test ps2/host-test/z3test /caminho/zelda3_assets.dat /tmp/z3-60 --palette
 ```
+
+O primeiro teste confere cada imagem exibida no modo 30 contra o passo correspondente da referência, preservando todas as atualizações da lógica. O segundo exercita também o caminho opcional de paletas. São testes no computador, não benchmarks de PS2.
+
+**Modo de vídeo** (Opções > Vídeo > MODO DE VIDEO): 480i (padrão), 240p ou 480p. O 480p é 704x480 progressivo, configurado como no Metroid Zero Mission DX;
+aparece uma tela de confirmação (aperte X em até 10 s para manter, senão volta) e o cartão só guarda o 480p depois de confirmado.

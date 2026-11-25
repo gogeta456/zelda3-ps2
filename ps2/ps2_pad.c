@@ -12,13 +12,9 @@ uint8_t Ps2PadDirections(uint8_t rx,uint8_t ry,int deadzone,uint8_t previous) {
 bool Ps2PadUpdate(Ps2PadState *s,const Ps2PadSample *p,const Ps2Settings *cfg) {
  if(!p->connected) { memset(s,0,sizeof(*s));return false; }
  uint16_t b=p->buttons; s->pressed=b&~s->held;s->held=b;
-#ifdef Z3_PS2_NO_MENU
- bool chord=false,open=false; // L2/R2 no longer intercept START.
-#else
  bool chord=(b&Z3P_MENU)==Z3P_MENU,open=chord&&!s->menu_latch;s->menu_latch=chord;
-#endif
  s->axes=p->analog&&cfg->analog?Ps2PadDirections(p->x,p->y,cfg->deadzone,s->axes):0;
- if(s->blocked||chord) { s->snes=0;
+ if(s->blocked||chord) { s->snes=0;s->ss_wait=0;s->tap_left=0;
  if(!b&&!s->axes)s->blocked=false;
  return open; }
  unsigned d=0;
@@ -31,7 +27,15 @@ bool Ps2PadUpdate(Ps2PadState *s,const Ps2PadSample *p,const Ps2Settings *cfg) {
  if((d&192)==192)d&=~192u;
  unsigned a=cfg->swap_ab?Z3P_CROSS:Z3P_CIRCLE,bb=cfg->swap_ab?Z3P_CIRCLE:Z3P_CROSS;
  unsigned x=cfg->swap_xy?Z3P_SQUARE:Z3P_TRIANGLE,y=cfg->swap_xy?Z3P_TRIANGLE:Z3P_SQUARE;
- s->snes=d|((b&bb)?1:0)|((b&y)?2:0)|((b&Z3P_SELECT)?4:0)|((b&Z3P_START)?8:0)|
+ unsigned ss=((b&Z3P_SELECT)?4:0)|((b&Z3P_START)?8:0),out=0;
+ if(ss) { s->ss_last=(uint16_t)ss;
+  if(s->ss_wait<Z3P_CHORD_WAIT) s->ss_wait++; else out=ss; // held back until it is clear this is not the menu chord
+ } else {
+  if(s->ss_wait>0&&s->ss_wait<=Z3P_CHORD_WAIT&&s->ss_last) { s->tap_left=Z3P_TAP_FRAMES;s->tap_snes=s->ss_last; } // released early: replay as a short tap
+  s->ss_wait=0;
+ }
+ if(s->tap_left) { out|=s->tap_snes;s->tap_left--; }
+ s->snes=d|((b&bb)?1:0)|((b&y)?2:0)|out|
          ((b&a)?256:0)|((b&x)?512:0)|((b&Z3P_L1)?1024:0)|((b&Z3P_R1)?2048:0);
  return open;
 }

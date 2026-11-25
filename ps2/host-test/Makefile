@@ -4,7 +4,7 @@
 # EXTRA=-DZ3_PIXEL_ABGR=1 builds with the PS2's native pixel order (the replay pictures must stay identical).
 ROOT := $(abspath ../..)
 SRCS := $(filter-out $(ROOT)/src/main.c $(ROOT)/src/opengl.c $(ROOT)/src/glsl_shader.c, $(wildcard $(ROOT)/src/*.c $(ROOT)/snes/*.c)) \
-        $(ROOT)/third_party/opus-1.3.1-stripped/opus_decoder_amalgam.c $(ROOT)/ps2/ps2_stubs.c $(ROOT)/ps2/ps2_indexed.c
+        $(ROOT)/third_party/opus-1.3.1-stripped/opus_decoder_amalgam.c $(ROOT)/ps2/ps2_stubs.c $(ROOT)/ps2/ps2_indexed.c $(ROOT)/ps2/ps2_gsppu.c
 OBJS := $(patsubst $(ROOT)/%.c,obj/%.o,$(SRCS)) obj/main_test.o
 CFLAGS := -std=gnu11 -O1 -g -fsanitize=alignment -fno-omit-frame-pointer -w -MMD -MP -DSYSTEM_VOLUME_MIXER_AVAILABLE=0 \
           -I$(ROOT) -iquote $(ROOT)/src $(EXTRA) $(shell sdl2-config --cflags)

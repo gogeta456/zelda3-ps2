@@ -32,7 +32,9 @@
 #include "ps2/ps2_settings.h"
 #include "ps2/ps2_pad.h"
 #include "ps2/ps2_audio.h"
+#include "ps2/ps2_frame.h"
 #include "ps2/ps2_video.h"
+#include "ps2/ps2_menu.h"
 static Ps2PadState g_ps2_pad;
 #endif
 
@@ -161,6 +163,9 @@ static void DrawPpuFrameWithPerf() {
   g_renderer_funcs.BeginDraw(g_snes_width * render_scale,
                              g_snes_height * render_scale,
                              &pixel_buffer, &pitch);
+#ifdef _EE
+  uint32_t prof_c0 = Ps2Cycles();
+#endif
   if (g_display_perf || g_config.display_perf_title) {
     static float history[64], average;
     static int history_pos;
@@ -177,6 +182,9 @@ static void DrawPpuFrameWithPerf() {
   }
   if (g_display_perf)
     RenderNumber(pixel_buffer + pitch * render_scale, pitch, g_curr_fps, render_scale == 4);
+#ifdef _EE
+  g_ps2_prof.ppu += Ps2Cycles() - prof_c0;
+#endif
   g_renderer_funcs.EndDraw();
 }
 
@@ -210,7 +218,25 @@ static void SDLCALL AudioCallback(void *userdata, Uint8 *stream, int len) {
 }
 
 #ifdef _EE
+// Switches the video mode when the menu changed it. 480p must be confirmed with X within 10 seconds, otherwise (or on a TV
+// that shows nothing) the previous mode comes back; the memory card never keeps an unconfirmed 480p.
+static void ApplyVideoMode(void) {
+  int want = g_ps2_settings.video_mode, cur = Ps2VideoMode();
+  if (want == cur) return;
+  if (want == 2) {
+    Ps2Settings keep = g_ps2_settings;
+    keep.video_mode = cur;
+    (void)Ps2SettingsSave(&keep);
+  }
+  bool ok = Ps2VideoSetMode(want);
+  if (ok && want == 2 && !Ps2VideoConfirm("480P"))
+    ok = false, Ps2VideoSetMode(cur);
+  g_ps2_settings.video_mode = Ps2VideoMode();
+  (void)Ps2SettingsSave(&g_ps2_settings);
+}
+
 static void ApplyPs2Settings(void) {
+  ApplyVideoMode();
   g_config.saturation = g_ps2_settings.saturation;
   g_config.audio_channels = g_ps2_settings.stereo ? 2 : 1;
   g_config.linear_filtering = g_ps2_settings.filtering;
@@ -245,13 +271,10 @@ static bool SdlRenderer_Init(SDL_Window *window) {
                                               SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
   if (renderer == NULL) {
     printf("Failed to create renderer: %s\n", SDL_GetError());
-    Z3LOG("Failed to create renderer: %s", SDL_GetError());
     return false;
   }
   SDL_RendererInfo renderer_info;
   SDL_GetRendererInfo(renderer, &renderer_info);
-  Z3LOG("renderer '%s' flags=0x%x tex_formats=%d max_tex=%dx%d", renderer_info.name, renderer_info.flags, renderer_info.num_texture_formats, renderer_info.max_texture_width, renderer_info.max_texture_height);
-  for (int i = 0; i < renderer_info.num_texture_formats; i++) Z3LOG("  tex format: %s", SDL_GetPixelFormatName(renderer_info.texture_formats[i]));
   if (kDebugFlag) {
     printf("Supported texture formats:");
     for (int i = 0; i < renderer_info.num_texture_formats; i++)
@@ -271,7 +294,6 @@ static bool SdlRenderer_Init(SDL_Window *window) {
 #ifdef _EE
   if (g_texture != NULL) SDL_SetTextureColorMod(g_texture, 128, 128, 128);
 #endif
-  Z3LOG("texture created: %s", g_texture ? "ok" : SDL_GetError());
   if (g_texture == NULL) {
     printf("Failed to create texture: %s\n", SDL_GetError());
     return false;
@@ -317,14 +339,9 @@ void OpenGLRenderer_Create(struct RendererFuncs *funcs, bool use_opengl_es);
 #ifdef _EE
 // libSDL2main provides main(): it resets the IOP and loads filesystem drivers, then calls SDL_main().
 int SDL_main(int argc, char** argv) {
-  Z3LOG("zelda3 PS2 port starting: argc=%d argv[0]=%s", argc, argc > 0 ? argv[0] : "(none)");
-  { char cwd[256]; if (getcwd(cwd, sizeof(cwd))) Z3LOG("cwd=%s", cwd); }
   ps2_pick_data_dir(argc > 0 ? argv[0] : NULL);
   {  // Allow SDK timer/RPC completion threads to preempt the game.
-    ee_thread_status_t st;
-    int old_prio = (ReferThreadStatus(GetThreadId(), &st) == 0) ? st.current_priority : -1;
     ChangeThreadPriority(GetThreadId(), 64);
-    Z3LOG("main thread priority %d -> 64", old_prio);
   }
 #else
 #undef main
@@ -344,14 +361,9 @@ int main(int argc, char** argv) {
 #ifdef _EE
   ps2_prepare_save_dir();
   Ps2SettingsLoad(&g_ps2_settings);
-  // R4 boots directly at native cadence, even with an old 30 FPS INI.
-  Ps2SettingsUseDirectBoot(&g_ps2_settings);
-  Z3LOG("R5: direct boot, 60 Hz target, cached subscreen math");
   ApplyPs2Settings();
 #endif
-  Z3LOG("config parsed");
   LoadAssets();
-  Z3LOG("assets loaded");
   LoadLinkGraphics();
 
   ZeldaInitialize();
@@ -398,14 +410,8 @@ int main(int argc, char** argv) {
   if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER) != 0) {
 #endif
     printf("Failed to init SDL: %s\n", SDL_GetError());
-    Z3LOG("Failed to init SDL: %s", SDL_GetError());
     return 1;
   }
-#ifdef _EE
-  Z3LOG("timer ready; video=gsKit native, input=libpad, audio=AUDSRV native");
-#else
-  Z3LOG("SDL_Init ok: video=%s audio=%s", SDL_GetCurrentVideoDriver(), SDL_GetCurrentAudioDriver());
-#endif
 
 #ifdef _EE
   SDL_Window *window = NULL;
@@ -426,20 +432,16 @@ int main(int argc, char** argv) {
   SDL_Window* window = SDL_CreateWindow(kWindowTitle, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, window_width, window_height, g_win_flags);
   if(window == NULL) {
     printf("Failed to create window: %s\n", SDL_GetError());
-    Z3LOG("Failed to create window: %s", SDL_GetError());
     return 1;
   }
-  Z3LOG("window created %dx%d", window_width, window_height);
   g_window = window;
   SDL_SetWindowHitTest(window, HitTestCallback, NULL);
 
 #endif
 
   if (!g_renderer_funcs.Initialize(window)) {
-    Z3LOG("renderer initialization failed");
     return 1;
   }
-  Z3LOG("renderer initialized");
 
   g_audio_mutex = SDL_CreateMutex();
   if (!g_audio_mutex) Die("No mutex");
@@ -455,10 +457,8 @@ int main(int argc, char** argv) {
     device = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
     if (device == 0) {
       printf("Failed to open audio device: %s\n", SDL_GetError());
-      Z3LOG("Failed to open audio device: %s", SDL_GetError());
       return 1;
     }
-    Z3LOG("audio opened: freq=%d channels=%d samples=%d format=0x%x", have.freq, have.channels, have.samples, have.format);
     g_audio_channels = have.channels;
     g_frames_per_block = (534 * have.freq) / 32000;
     g_audiobuffer = malloc(g_frames_per_block * have.channels * sizeof(int16));
@@ -480,19 +480,23 @@ int main(int argc, char** argv) {
   ZeldaReadSram();
 
 #ifdef _EE
-  if (!Ps2PadInit()) Z3LOG("FAILED to initialize native pad driver");
-  if (!Ps2AudioInit(g_config.audio_channels, g_ps2_settings.volume)) Z3LOG("FAILED to initialize native audio");
+  Ps2PadInit();
+  // The settings menu no longer opens at startup: the game starts right away (Start + Select opens the menu).
+  ApplyPs2Settings();
+  Ps2AudioInit(g_config.audio_channels, g_ps2_settings.volume);
 #else
   for (int i = 0; i < SDL_NumJoysticks(); i++) OpenOneGamepad(i);
 #endif
 
-  Z3LOG("entering main loop");
-  Z3LOG_STOP();  // no more log file writes while playing
   bool running = true;
   SDL_Event event;
   uint32 lastTick = SDL_GetTicks();
   uint32 curTick = 0;
   uint32 frameCtr = 0;
+#ifdef _EE
+  Ps2FrameClock frame_clock;
+  Ps2FrameReset(&frame_clock, lastTick);
+#endif
 #ifndef _EE
   bool audiopaused = true;
 #endif
@@ -503,8 +507,20 @@ int main(int argc, char** argv) {
   while(running) {
 #ifdef _EE
     Ps2PadSample sample = Ps2PadPoll();
-    Ps2PadUpdate(&g_ps2_pad, &sample, &g_ps2_settings);
-    if (g_ps2_pad.pressed & Z3P_L3) Ps2VideoToggleStats();
+    if (Ps2PadUpdate(&g_ps2_pad, &sample, &g_ps2_settings)) {
+      Ps2AudioPause(true);
+      int old_channels = g_config.audio_channels;
+      bool was_ready = Ps2AudioReady();
+      Ps2MenuRun(&g_ps2_pad);
+      if (Ps2MenuExitRequested()) { running = false; continue; }
+      ApplyPs2Settings();
+      if (old_channels != g_config.audio_channels || !was_ready) {
+        Ps2AudioShutdown(); Ps2AudioInit(g_config.audio_channels, g_ps2_settings.volume);
+      } else Ps2AudioPause(false);
+      lastTick = SDL_GetTicks();
+      Ps2FrameReset(&frame_clock, lastTick);
+      continue;
+    }
     int inputs = g_ps2_pad.snes;
 #else
     while(SDL_PollEvent(&event)) {
@@ -563,15 +579,14 @@ int main(int argc, char** argv) {
 #endif
 
 #ifdef _EE
-    Ps2VideoStatsStart();
+    uint32_t prof_l0 = Ps2Cycles();
 #endif
     SDL_LockMutex(g_audio_mutex);
     bool is_replay = ZeldaRunFrame(inputs);
     SDL_UnlockMutex(g_audio_mutex);
 #ifdef _EE
-    Ps2VideoStatsStep(0);
     Ps2AudioSubmitFrame();
-    Ps2VideoStatsStep(1);
+    g_ps2_prof.logic += Ps2Cycles() - prof_l0;
 #endif
 
     frameCtr++;
@@ -582,6 +597,13 @@ int main(int argc, char** argv) {
     (void)is_replay;
 #endif
 
+#ifdef _EE
+    // Presentation is fixed at 60 FPS with frameskip off (both are forced by
+    // ps2_settings.c and have no menu entry): every game/audio update is drawn
+    // and no drawing pass is dropped for lateness, the game just runs slower.
+    if (!Ps2FrameAdvance(&frame_clock, g_ps2_settings.frame_mode != 0, SDL_GetTicks(), Ps2AudioStarved(), g_ps2_settings.frameskip != 0))
+      continue;
+#endif
     DrawPpuFrameWithPerf();
 
     if (g_config.display_perf_title) {
@@ -593,9 +615,12 @@ int main(int argc, char** argv) {
     // if vsync isn't working, delay manually
     curTick = SDL_GetTicks();
 
-#ifndef _EE
-    // The native PS2 renderer already waits for VBlank once per picture.
-    // An additional timer delay here can miss the next display interval.
+#ifdef _EE
+    // Account for time already spent drawing/waiting for GS vsync. At 30 FPS,
+    // the skipped drawing pass has its own game/audio update, not a sleep.
+    unsigned wait_ms = Ps2FrameWait(&frame_clock, curTick);
+    if (wait_ms) SDL_Delay(wait_ms);
+#else
     if (!g_config.disable_frame_delay) {
       static const uint8 delays[3] = { 17, 17, 16 }; // 60 fps
       lastTick += delays[frameCtr % 3];

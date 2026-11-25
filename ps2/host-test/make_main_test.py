@@ -5,8 +5,6 @@ Not used by the PS2 build. Environment variables read by the generated program:
   Z3_FRAMES=n       stop after n frames
   Z3_DUMP=prefix    write <prefix>_<frame>.ppm screenshots ...
   Z3_DUMP_EVERY=n   ... every n frames (default 2000)
-  Z3_PROFILE=file   write per-frame PPU CPU time and scene/color state as CSV (host timing only)
-  Z3_GS_INDEXED=1   enable experimental GS palette emulation; disabled by default like native R5
   Z3_HASH=file      write one hash of the finished picture per frame; two builds that print the same file draw identical frames
                     (this is how the PPU speed-ups were checked: 13 chapters x 2500 frames, bit-exact)
 """
@@ -29,30 +27,15 @@ helper = anchor + r'''
 #include "ps2/ps2_indexed.h"
 static unsigned long long g_indexed_total;
 #endif
-#include <time.h>
+#ifdef Z3_GSPPU_CAPTURE
+#include "ps2/ps2_gsppu.h"
+void Ps2GsPpuCapture(const Ppu *ppu, const uint8_t *pix, int pitch, const char *prefix, int frame);
+#endif
+#ifdef Z3_FRAME_TEST
+#include "ps2/ps2_frame.h"
+static Ps2FrameClock g_test_clock;
+#endif
 static int g_test_frames;
-static FILE *g_profile_file;
-static uint64_t TestProfileBegin(void) {
-  if (!getenv("Z3_PROFILE")) return 0;
-  struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t);
-  return (uint64_t)t.tv_sec * 1000000000 + t.tv_nsec;
-}
-static void TestProfileEnd(uint64_t before) {
-  if (!before) return;
-  struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t);
-  uint64_t elapsed = (uint64_t)t.tv_sec * 1000000000 + t.tv_nsec - before;
-  if (!g_profile_file) {
-    g_profile_file = fopen(getenv("Z3_PROFILE"), "w");
-    if (!g_profile_file) exit(2);
-    fputs("frame,module,submodule,room,overworld,ppu_ns,mode,main,sub,math,addsub,half,subtract,clip,prevent,fixed,dark\n", g_profile_file);
-  }
-  Ppu *p = g_zenv.ppu;
-  fprintf(g_profile_file,"%d,%u,%u,%u,%u,%llu,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
-      g_test_frames,main_module_index,submodule_index,dungeon_room_index,overworld_screen_index,
-      (unsigned long long)elapsed,p->mode,p->screenEnabled[0],p->screenEnabled[1],p->mathEnabled,
-      p->addSubscreen,p->halfColor,p->subtractColor,p->clipMode,p->preventMathMode,
-      p->fixedViewR | p->fixedViewG << 5 | p->fixedViewB << 10, hdr_dungeon_dark_with_lantern);
-}
 static FILE *g_hash_file;
 static uint32 ToArgb(uint32 p) {
 #ifdef Z3_PIXEL_ABGR
@@ -66,6 +49,11 @@ static void TestDump(const uint8 *pix, int pitch, int w, int h) {
   Ps2IndexedResolve((uint8 *)pix, pitch);
   g_indexed_total += g_ps2_indexed.indexed_lines;
   if (g_test_frames % 2500 == 0) fprintf(stderr, "GS indexed scanlines: %llu\n", g_indexed_total);
+#endif
+#ifdef Z3_GSPPU_CAPTURE
+  { const char *cp = getenv("Z3_CAPTURE"), *ce = getenv("Z3_CAPTURE_EVERY");
+    int cev = ce ? atoi(ce) : 600;
+    if (cp && cev > 0 && g_test_frames % cev == 0) Ps2GsPpuCapture(g_zenv.ppu, pix, pitch, cp, g_test_frames); }
 #endif
   const char *hp = getenv("Z3_HASH");
   if (hp) {
@@ -92,7 +80,7 @@ static void TestDump(const uint8 *pix, int pitch, int w, int h) {
 }
 '''
 src = replace_once(src, anchor, helper)
-src = replace_once(src, "static void DrawPpuFrameWithPerf() {\n", "static void DrawPpuFrameWithPerf() {\n#ifdef Z3_GS_TEST\n  Ps2IndexedBegin(getenv(\"Z3_GS_INDEXED\") != NULL);\n#endif\n")
+src = replace_once(src, "static void DrawPpuFrameWithPerf() {\n", "static void DrawPpuFrameWithPerf() {\n#ifdef Z3_GS_TEST\n  Ps2IndexedBegin(getenv(\"Z3_PALETTE\") != NULL);\n#endif\n#ifdef Z3_GSPPU_CAPTURE\n  Ps2GsPpuBegin(true);\n#endif\n")
 
 a = "    RenderNumber(pixel_buffer + pitch * render_scale, pitch, g_curr_fps, render_scale == 4);\n"
 src = replace_once(src, a, a + "  TestDump(pixel_buffer, pitch, g_snes_width * render_scale, g_snes_height * render_scale);\n")
@@ -100,8 +88,7 @@ a = "  ZeldaReadSram();\n"
 src = replace_once(src, a, a + '  if (getenv("Z3_REPLAY")) SaveLoadSlot(kSaveLoad_Replay, 256 + atoi(getenv("Z3_REPLAY")));\n')
 a = "    frameCtr++;\n"
 src = replace_once(src, a, a + '    g_test_frames = frameCtr;\n    { static int lim = -1; if (lim < 0) lim = getenv("Z3_FRAMES") ? atoi(getenv("Z3_FRAMES")) : 0; if (lim > 0 && (int)frameCtr >= lim) running = false; }\n')
-src = replace_once(src, "  ZeldaSetLanguage(g_config.language);\n", "  ZeldaSetLanguage(g_config.language);\n  fprintf(stderr, \"Language flags: %u\\n\", g_zenv.dialogue_flags);\n")
-src = src.replace("    ZeldaDrawPpuFrame(pixel_buffer, pitch, g_ppu_render_flags);", "    uint64_t profile_start = TestProfileBegin();\n    ZeldaDrawPpuFrame(pixel_buffer, pitch, g_ppu_render_flags);\n    TestProfileEnd(profile_start);")
+src = replace_once(src, "    DrawPpuFrameWithPerf();\n", "#ifdef Z3_FRAME_TEST\n    if (!Ps2FrameAdvance(&g_test_clock, getenv(\"Z3_PRESENT30\") == NULL, g_test_clock.deadline, true, true)) continue;\n#endif\n    DrawPpuFrameWithPerf();\n")
 src = replace_once(src, "g_replay_turbo = true", "g_replay_turbo = false")   # draw every frame so the PPU code is exercised
 pathlib.Path(sys.argv[2] if len(sys.argv) > 2 else here / 'main_test.c').write_text(src)
 print("wrote main_test.c")
